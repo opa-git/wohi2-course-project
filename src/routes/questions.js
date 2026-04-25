@@ -1,6 +1,10 @@
 const express = require("express");
 const router = express.Router();
 const prisma = require("../lib/prisma");
+const authenticate = require("../middleware/auth");
+
+// Apply authentication to routes
+router.use(authenticate);
 
 // GET /questions
 // List all questions
