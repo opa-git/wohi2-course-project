@@ -7,17 +7,51 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model User {
+  id        Int        @id @default(autoincrement())
+  email     String     @unique @db.VarChar(255)
+  password  String     @db.VarChar(255)
+  name      String     @db.VarChar(100)
+  questions Question[]
+  attempts  Attempt[]
+
+  @@map("users")
+}
+
 model Question {
-  id       Int    @id @default(autoincrement())
-  question String
-  answer   String
+  id        Int       @id @default(autoincrement())
+  question  String    @db.Text
+  answer    String    @db.Text
+  imageUrl  String?   @db.VarChar(255)
+
+  userId    Int
+  user      User      @relation(fields: [userId], references: [id])
+
+  keywords  Keyword[]
+  attempts  Attempt[]
 
   @@map("questions")
 }
 
-model User {
-  id       Int    @id @default(autoincrement())
-  email    String @unique @db.VarChar(255)
-  password String @db.VarChar(255)
-  name     String @db.VarChar(100)
+model Keyword {
+  id        Int        @id @default(autoincrement())
+  name      String     @unique @db.VarChar(100)
+  questions Question[]
+
+  @@map("keywords")
+}
+
+model Attempt {
+  id              Int      @id @default(autoincrement())
+  submittedAnswer String   @db.Text
+  correct         Boolean
+  createdAt       DateTime @default(now())
+
+  userId          Int
+  user            User     @relation(fields: [userId], references: [id])
+
+  questionId      Int
+  question        Question @relation(fields: [questionId], references: [id])
+
+  @@map("attempts")
 }
