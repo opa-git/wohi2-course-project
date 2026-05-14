@@ -7,6 +7,9 @@ const prisma = require("../lib/prisma");
 const authenticate = require("../middleware/auth");
 const isOwner = require("../middleware/isOwner");
 
+const { z } = require("zod");
+const { ValidationError, NotFoundError } = require("../lib/errors");
+
 const storage = multer.diskStorage({
   destination: path.join(__dirname, "..", "..", "public", "uploads"),
   filename: (req, file, cb) => {
@@ -21,10 +24,20 @@ const upload = multer({
     if (file.mimetype.startsWith("image/")) {
       cb(null, true);
     } else {
-      cb(new Error("Only image files are allowed"));
+      cb(new ValidationError("Only image files are allowed"));
     }
   },
   limits: { fileSize: 5 * 1024 * 1024 }
+});
+
+const QuestionInput = z.object({
+  question: z.string().min(1),
+  answer: z.string().min(1),
+  keywords: z.union([z.string(), z.array(z.string())]).optional()
+});
+
+const PlayInput = z.object({
+  answer: z.string().min(1)
 });
 
 function parseKeywords(keywords) {
@@ -122,7 +135,7 @@ router.get("/:qId", async (req, res, next) => {
     });
 
     if (!question) {
-      return res.status(404).json({ message: "Question not found" });
+      throw new NotFoundError("Question not found");
     }
 
     res.json(formatQuestion(question));
@@ -135,13 +148,8 @@ router.get("/:qId", async (req, res, next) => {
 // Create a new question
 router.post("/", upload.single("image"), async (req, res, next) => {
   try {
-    const { question, answer, keywords } = req.body;
-
-    if (!question || !answer) {
-      return res.status(400).json({
-        message: "question and answer are required"
-      });
-    }
+    const input = QuestionInput.parse(req.body);
+    const { question, answer, keywords } = input;
 
     const keywordsArray = parseKeywords(keywords);
     const imageUrl = req.file ? `/uploads/${req.file.filename}` : null;
@@ -179,18 +187,16 @@ router.post("/", upload.single("image"), async (req, res, next) => {
 router.post("/:qId/play", async (req, res, next) => {
   try {
     const qId = Number(req.params.qId);
-    const { answer } = req.body;
 
-    if (!answer) {
-      return res.status(400).json({ message: "answer is required" });
-    }
+    const input = PlayInput.parse(req.body);
+    const { answer } = input;
 
     const question = await prisma.question.findUnique({
       where: { id: qId }
     });
 
     if (!question) {
-      return res.status(404).json({ message: "Question not found" });
+      throw new NotFoundError("Question not found");
     }
 
     const correct =
@@ -219,20 +225,16 @@ router.post("/:qId/play", async (req, res, next) => {
 
 // PUT /questions/:qId
 // Edit a question
-router.put("/:qId", upload.single("image"), isOwner, async (req, res, next) => {
+router.put("/:qId", isOwner, upload.single("image"), async (req, res, next) => {
   try {
     const qId = Number(req.params.qId);
-    const { question, answer, keywords } = req.body;
 
-    if (!question || !answer) {
-      return res.status(400).json({
-        message: "question and answer are required"
-      });
-    }
+    const input = QuestionInput.parse(req.body);
+    const { question, answer, keywords } = input;
 
     const keywordsArray = parseKeywords(keywords);
 
-    const data = {
+    const updateData = {
       question,
       answer,
       keywords: {
@@ -245,12 +247,12 @@ router.put("/:qId", upload.single("image"), isOwner, async (req, res, next) => {
     };
 
     if (req.file) {
-      data.imageUrl = `/uploads/${req.file.filename}`;
+      updateData.imageUrl = `/uploads/${req.file.filename}`;
     }
 
     const updatedQuestion = await prisma.question.update({
       where: { id: qId },
-      data,
+      data: updateData,
       include: {
         keywords: true,
         user: true,
@@ -291,10 +293,7 @@ router.delete("/:qId", isOwner, async (req, res, next) => {
 
 // Multer errors as JSON
 router.use((err, req, res, next) => {
-  if (
-    err instanceof multer.MulterError ||
-    err?.message === "Only image files are allowed"
-  ) {
+  if (err instanceof multer.MulterError || err instanceof ValidationError) {
     return res.status(400).json({ msg: err.message });
   }
 
