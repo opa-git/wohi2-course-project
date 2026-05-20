@@ -12,7 +12,7 @@ ALTER TABLE `questions` ADD COLUMN `imageUrl` VARCHAR(255) NULL,
     MODIFY `answer` TEXT NOT NULL;
 
 -- DropTable
-DROP TABLE `user`;
+DROP TABLE `User`;
 
 -- CreateTable
 CREATE TABLE `users` (
